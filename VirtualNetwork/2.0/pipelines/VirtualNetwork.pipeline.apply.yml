@@ -1,0 +1,54 @@
+parameters:
+  moduleName: VirtualNetwork
+  moduleVersion: 2.0
+  moduleTier: Modules-Terraform
+  moduleSolutionName: VirtualNetwork_2.0
+  azure_sub: $(connectionService)
+  environment: $(environment)
+  location: $(location)
+  connectionService: $(connectionService)
+  SecretsFilter: $(SecretsFilter)
+  resource_name_vnet: $(resource_name_vnet)
+
+jobs:
+  - deployment:
+    displayName: 'Apply Module ${{ parameters.moduleName }}'
+    pool:
+      vmImage: 'windows-latest'
+    dependsOn: '${{ parameters.dependsOn }}'
+    condition: '${{ parameters.condition }}'
+    environment: '${{ parameters.environment }}'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: none
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              artifact: "${{parameters.resource_name_vnet}}-plan"
+              path: '$(System.DefaultWorkingDirectory)/${{ parameters.moduleTier }}/${{ parameters.moduleName }}/${{ parameters.moduleVersion }}/'
+          
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: '0.12.24'
+          
+#          - task: AzureKeyVault@1
+#            inputs:
+#              azureSubscription: '${{parameters.azure_sub}}'
+#              KeyVaultName: $(AKV)
+#              SecretsFilter: '${{parameters.secretsFilter}}'
+          
+          - task: TerraformTaskV1@0
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.moduleTier }}/${{ parameters.moduleName }}/${{ parameters.moduleVersion }}/'
+              environmentServiceNameAzureRM: '${{parameters.azure_sub}}'
+
+#          - task: AzurePowerShell@4
+#            displayName: 'Configuration - Add ${{ parameters.moduleName }} Secrets to KeyVault'
+#            inputs:
+#              azureSubscription: '${{ parameters.connectionService }}'
+#              scriptpath: '$(System.DefaultWorkingDirectory)/${{ parameters.moduleTier }}/${{ parameters.moduleName }}/${{ parameters.moduleVersion }}/Scripts/${{ parameters.moduleName }}.akv.set.secrets.ps1'
+#              scriptarguments: '-keyVaultName "$(akv)" -VirtualNetworkName "$(VirtualNetworkName)" -VirtualNetworkResourceId "$(VirtualNetworkResourceId)" -VirtualNetworkResourceGroup "$(VirtualNetworkResourceGroup)" -VirtualNetworkAccessKey "$(VirtualNetworkAccessKey)"'
+#              azurePowerShellVersion: LatestVersion

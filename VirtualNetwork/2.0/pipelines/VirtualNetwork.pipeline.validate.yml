@@ -1,0 +1,121 @@
+parameters:
+  moduleName: VirtualNetwork
+  moduleVersion: 2.0
+  moduleTier: Modules-Terraform
+  moduleSolutionName: VirtualNetwork_2.0
+  environment: $(environment)
+  azure_sub: $(connectionService)
+  Location: $(location)
+  storage_resource_group_name: $(resourceGroup_stor)
+  storage_name: $(storageAccount_Name)
+  container_name: $(storage_container)
+  dns_service_ip: $(dns_service_ip)
+  resource_group_name_vnet: $(resource_group_name_vnet)
+  resource_name_vnet: $(resource_name_vnet)
+  address_space: $(address_space)
+  subnet_prefixes: $(subnet_prefixes)
+  subnet_names: $(subnet_names)
+  workspace_id: $(workspace_id)
+  workspace_rgname: $(workspace_rgname)
+
+jobs:
+  - job: 'ValidateModule_${{ parameters.moduleName }}'
+    displayName: 'Validate Module ${{ parameters.moduleName }}'
+    #environment: '${{ parameters.environment }}'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    
+    - task: AzureCLI@2
+      displayName: Setup
+      inputs:
+        azureSubscription: ${{parameters.azure_sub}} 
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+            ARM_SUBSCRIPTION_ID=$(az account show --query id --out tsv)
+            az account set --subscription $ARM_SUBSCRIPTION_ID
+            az group show -n ${{parameters.resource_group_name_vnet}} > /dev/null
+            if [ $? -eq 0 ]
+            then
+                echo "Using resource group ${{parameters.resource_group_name_vnet}}"
+            else
+                
+                az group create \
+                  -l ${{parameters.location}} \
+                  -n ${{parameters.resource_group_name_vnet}}
+            fi
+            az group show -n ${{parameters.storage_resource_group_name}} > /dev/null
+            if [ $? -eq 0 ]
+            then
+                echo "Using resource group ${{parameters.storage_resource_group_name}}"
+            else
+                
+                az group create \
+                  -l ${{parameters.location}} \
+                  -n ${{parameters.storage_resource_group_name}}
+            fi
+            az storage account show -n ${{parameters.storage_name}} -g ${{parameters.storage_resource_group_name}} > /dev/null
+            if [ $? -eq 0 ]
+            then
+                echo "Using storage account ${{parameters.storage_name}} in resource group ${{parameters.storage_resource_group_name}}"
+            else
+                
+                az storage account create \
+                    --resource-group ${{parameters.storage_resource_group_name}} \
+                    --name ${{parameters.storage_name}} \
+                    --sku Standard_LRS \
+                    --encryption-services blob
+                
+                az storage container create \
+                  --name ${{parameters.container_name}} \
+                  --account-name ${{parameters.storage_name}}
+
+                az storage account keys list \
+                  -g ${{parameters.storage_resource_group_name}} \
+                  -n ${{parameters.storage_name}}
+            fi
+            pwd
+            ls -l
+            cd ./${{ parameters.moduleTier }}/${{ parameters.moduleName }}/${{ parameters.moduleVersion }}/
+            cat <<EOT >> dev.auto.tfvars
+              location= "${{parameters.location}}"
+              tags = {
+                  source = "terraform"
+                  env    = "${{parameters.environment}}"
+                }
+              resource_group_name_vnet= "${{parameters.resource_group_name_vnet}}"
+              dns_service_ip= "${{parameters.dns_service_ip}}"
+              resource_name_vnet= "${{parameters.resource_name_vnet}}"
+              address_space= ${{parameters.address_space}}
+              subnet_prefixes= ${{parameters.subnet_prefixes}}
+              subnet_names= ${{parameters.subnet_names}}
+              workspace_id= "${{parameters.workspace_id}}"
+              workspace_rgname="${{parameters.workspace_rgname}}"
+            EOT
+    
+    - task: AzurePowerShell@5
+      inputs:
+        azureSubscription: ${{parameters.azure_sub}}
+        ScriptType: 'InlineScript'
+        Inline: |
+          $key=(get-AzStorageAccountKey -ResourceGroupName ${{parameters.storage_resource_group_name}} -AccountName ${{parameters.storage_name}}).Value[0]
+          
+          Write-Host "##vso[task.setvariable variable=storagekey]$key"
+        azurePowerShellVersion: 'LatestVersion'
+
+    - task: replacetokens@3
+      inputs:
+        targetFiles: '**/*.tf'
+        encoding: 'auto'
+        writeBOM: true
+        escapeType: 'none'
+        actionOnMissing: 'warn'
+        keepToken: false
+        tokenPrefix: '#{'
+        tokenSuffix: '}#'
+    
+    - task: PublishPipelineArtifact@1
+      inputs:
+        path: '$(System.DefaultWorkingDirectory)/${{ parameters.moduleTier }}/${{ parameters.moduleName }}/${{ parameters.moduleVersion }}/'
+        artifactName: "${{parameters.resource_name_vnet}}-vars"
