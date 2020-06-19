@@ -3,7 +3,7 @@ name: $(moduleName)-$(moduleVersion)
 variables:
 - template: VirtualNetwork.pipeline.environments.yaml
 - template: VirtualNetwork.pipeline.variables.yml
-
+- template: /Modules-Terraform/.global/global.variables.yml
 
 trigger:
   branches:

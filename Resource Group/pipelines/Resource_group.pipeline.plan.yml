@@ -1,0 +1,56 @@
+parameters:
+  moduleName: VirtualNetwork
+  moduleVersion: 2.0
+  moduleTier: Modules-Terraform
+  moduleSolutionName: VirtualNetwork_2.0
+  environment: $(environment)
+  azure_sub: $(connectionService)
+  storage_resource_group_name: $(resourceGroup_stor)
+  storage_name: $(storageAccount_Name)
+  container_name: $(storage_container)
+  workspace_id: $(workspace_id)
+  workspace_rgname: $(workspace_rgname)
+  Location: $(location)
+  resource_name_vnet: $(resource_name_vnet)
+
+jobs:
+  - job: 'Plan_${{ parameters.moduleName }}'
+    displayName: 'plan Module ${{ parameters.moduleName }}'
+    #environment: '${{ parameters.environment }}'
+    pool:
+      vmImage: 'windows-latest'
+
+    steps:
+    - task: DownloadPipelineArtifact@2
+      inputs:
+        artifact: "${{parameters.resource_name_vnet}}-vars"
+        path: '$(System.DefaultWorkingDirectory)/${{ parameters.moduleTier }}/${{ parameters.moduleName }}/${{ parameters.moduleVersion }}/'
+
+    - task: TerraformInstaller@0
+      inputs:
+        terraformVersion: '0.12.24'
+
+    - task: TerraformTaskV1@0
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+#        commandOptions: '-upgrade -input=false'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.moduleTier }}/${{ parameters.moduleName }}/${{ parameters.moduleVersion }}/'
+        backendServiceArm: '${{parameters.azure_sub}}'
+        backendAzureRmResourceGroupName: '${{parameters.storage_resource_group_name}}'
+        backendAzureRmStorageAccountName: '${{parameters.storage_name}}'
+        backendAzureRmContainerName: '${{parameters.container_name}}'
+        backendAzureRmKey: 'tf/"${{parameters.resource_name_vnet}}".terraform.tfstate'
+
+    - task: TerraformTaskV1@0
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        commandOptions: '-out=${{ parameters.moduleTier }}.plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.moduleTier }}/${{ parameters.moduleName }}/${{ parameters.moduleVersion }}/'
+        environmentServiceNameAzureRM: '${{parameters.azure_sub}}'
+
+    - task: PublishPipelineArtifact@1
+      inputs:
+        path: '$(System.DefaultWorkingDirectory)/${{ parameters.moduleTier }}/${{ parameters.moduleName }}/${{ parameters.moduleVersion }}/'
+        artifactName: "${{parameters.resource_name_vnet}}-plan"  
