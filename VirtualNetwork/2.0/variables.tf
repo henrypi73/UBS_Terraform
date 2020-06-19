@@ -5,7 +5,7 @@ variable "resource_name_vnet" {
 
 variable "resource_group_name_vnet" {
   description = "Name of the resource group to be imported."
-  default     = "rg-tera-net-001"
+  default     = "rg-ss-net-001"
 }
 
 variable "address_space" {
