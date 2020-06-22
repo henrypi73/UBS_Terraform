@@ -1,6 +1,4 @@
-# Create a resource group
-resource "azurerm_resource_group" "rg" {
-  name     = "${var.prefix}TFRG"
-  location = var.location
-  tags     = var.tags
+resource "azurerm_resource_group" "example" {
+  name     = "rsg-tf-01"
+  location = "West Europe"
 }
